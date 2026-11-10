@@ -17,6 +17,8 @@ A sample **multi-agent** application: a banker logs in, opens a chat, names a cl
 
 ## Architecture
 
+> 📘 Full technical design, flows and RAG / ADK internals: [docs/DESIGN.md](docs/DESIGN.md)
+
 ```
 React (Vite) ──SSE──► FastAPI ──► Google ADK Runner
   login + chat          /api/auth/login (JWT)
