@@ -1,0 +1,13 @@
+# Agent orchestration
+google-adk==2.14.0
+# MCP SDK (mock FactSet + Web Search servers)
+mcp==2.3.0
+# RAG: embedded vector DB with local ONNX embeddings (free, no API key)
+chromadb==1.5.9
+pypdf==7.0.0
+reportlab==5.1.0
+# API
+fastapi==0.162.2
+uvicorn[standard]==0.54.0
+PyJWT==2.15.1
+python-dotenv==1.2.4
