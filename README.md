@@ -18,6 +18,7 @@ A sample **multi-agent** application: a banker logs in, opens a chat, names a cl
 ## Architecture
 
 > 📘 Full technical design, flows and RAG / ADK internals: [docs/DESIGN.md](docs/DESIGN.md)
+> 🎓 New to Google ADK? Start with the beginner tutorial: [docs/TUTORIAL_ADK.md](docs/TUTORIAL_ADK.md)
 
 ```
 React (Vite) ──SSE──► FastAPI ──► Google ADK Runner
