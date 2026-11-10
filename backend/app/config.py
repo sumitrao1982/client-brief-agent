@@ -7,9 +7,15 @@ from dotenv import load_dotenv
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BACKEND_DIR / ".env")
 
-# --- LLM (Google ADK) ---
-# Default: Gemini via Google AI Studio (free tier). Set GOOGLE_API_KEY in .env.
-ADK_MODEL = os.getenv("ADK_MODEL", "gemini-2.5-flash")
+# --- LLM: Claude via the Anthropic API (used by Google ADK's AnthropicLlm) ---
+# Needs ANTHROPIC_API_KEY in .env (https://console.anthropic.com/).
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-5-5")
+# Model for the three research specialists; defaults to CLAUDE_MODEL.
+# Set e.g. claude-sonnet-5-5 or claude-haiku-5-5 here to cut cost.
+CLAUDE_SPECIALIST_MODEL = os.getenv("CLAUDE_SPECIALIST_MODEL", CLAUDE_MODEL)
+# Reasoning effort: low | medium | high | xhigh | max (Claude Opus 5.5's default is medium).
+CLAUDE_EFFORT = os.getenv("CLAUDE_EFFORT", "medium")
+CLAUDE_MAX_TOKENS = int(os.getenv("CLAUDE_MAX_TOKENS", "16000"))
 
 # --- RAG ---
 DOCS_DIR = Path(os.getenv("DOCS_DIR", BACKEND_DIR / "data" / "internal_docs"))

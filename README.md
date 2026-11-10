@@ -2,7 +2,7 @@
 
 A sample **multi-agent** application: a banker logs in, opens a chat, names a client or ticker
 ("Prepare me for my meeting with Northwind Logistics"), and a team of agents built with
-**Google ADK** researches the client **in parallel** from three kinds of source, then writes a meeting brief:
+**Google ADK**, powered by **Claude**, researches the client **in parallel** from three kinds of source, then writes a meeting brief:
 
 | Source | How it's implemented | What it gives the brief |
 |---|---|---|
@@ -86,8 +86,8 @@ client-brief-agent/
 
 ## Run it locally
 
-**Prerequisites:** Python 3.11+ (tested with 3.13), Node 18+ (tested with 22), and a free Gemini API key from
-https://aistudio.google.com/apikey
+**Prerequisites:** Python 3.11+ (tested with 3.13), Node 18+ (tested with 22), and an Anthropic API key from
+https://console.anthropic.com/ (Settings → API keys; usage is billed per token).
 
 ### 1. Backend
 
@@ -100,7 +100,7 @@ source .venv/bin/activate
 # .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 cp .env.example .env          # Windows: copy .env.example .env
-# edit .env and set GOOGLE_API_KEY=...
+# edit .env and set ANTHROPIC_API_KEY=...
 python -m app.rag.ingest      # builds the ChromaDB index (first run downloads an ~80 MB embedding model)
 uvicorn app.main:app --reload --port 8000
 ```
@@ -125,8 +125,10 @@ Open http://localhost:5173 and sign in as **`banker` / `demo123`** (or `analyst`
 
 ## Customising
 
-- **Model:** set `ADK_MODEL` in `.env` (default `gemini-2.5-flash`). Each brief makes roughly 15–20 LLM calls,
-  so the Gemini free tier's rate limits can slow it down.
+- **Model:** Claude through ADK's `AnthropicLlm`. In `.env`, `CLAUDE_MODEL` (default `claude-opus-5-5`) runs the
+  coordinator and brief writer. Set `CLAUDE_SPECIALIST_MODEL` (e.g. `claude-sonnet-5-5` or `claude-haiku-5-5`) to run
+  the three research agents on a cheaper model. `CLAUDE_EFFORT` (default `medium`) sets how much Claude reasons.
+  Each brief makes roughly 15–20 Claude calls; ADK prompt caching is enabled to cut the cost of repeated prompts.
 - **Your own documents:** drop PDFs into `backend/data/internal_docs/` (name them `<TICKER>_...pdf`) and run
   `python -m app.rag.ingest` (or `POST /api/rag/reindex`). To add a ticker, also add it to the set in `rag/ingest.py → _doc_meta`.
 - **Regenerate the sample PDFs:** `python scripts/generate_sample_pdfs.py`

@@ -1,5 +1,7 @@
 # Agent orchestration
 google-adk==2.14.0
+# LLM: Claude via the Anthropic API (used by ADK's AnthropicLlm)
+anthropic==2.7.0
 # MCP SDK (mock FactSet + Web Search servers)
 mcp==2.3.0
 # RAG: embedded vector DB with local ONNX embeddings (free, no API key)

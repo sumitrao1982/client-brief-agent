@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import authenticate, create_token, current_user, current_user_header_or_query
 from app.chat_service import ChatService
-from app.config import ADK_MODEL, DOCS_DIR, FRONTEND_ORIGINS
+from app.config import CLAUDE_MODEL, CLAUDE_SPECIALIST_MODEL, DOCS_DIR, FRONTEND_ORIGINS
 from app.rag.ingest import ingest
 from app.rag.store import get_collection
 
@@ -51,7 +51,7 @@ class ChatRequest(BaseModel):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "model": ADK_MODEL, "rag_chunks": get_collection().count()}
+    return {"status": "ok", "model": CLAUDE_MODEL, "specialist_model": CLAUDE_SPECIALIST_MODEL, "rag_chunks": get_collection().count()}
 
 
 @app.post("/api/auth/login")

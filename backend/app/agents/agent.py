@@ -13,15 +13,31 @@ import sys
 from datetime import date
 
 from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent
+from google.adk.models.anthropic_llm import AnthropicGenerateContentConfig, AnthropicLlm
 from google.adk.tools import ToolContext
 from google.adk.tools.mcp_tool import McpToolset, StdioConnectionParams
-from google.genai import types
 from mcp import StdioServerParameters
 
-from app.config import ADK_MODEL, MCP_DIR
+from app.config import (
+    CLAUDE_EFFORT,
+    CLAUDE_MAX_TOKENS,
+    CLAUDE_MODEL,
+    CLAUDE_SPECIALIST_MODEL,
+    MCP_DIR,
+)
 from app.tools.rag_tool import search_internal_research
 
-GEN_CONFIG = types.GenerateContentConfig(temperature=0.2)
+# ---------------------------------------------------------------------------
+# LLM: Claude through the Anthropic API.
+# AnthropicLlm uses AsyncAnthropic(), which reads ANTHROPIC_API_KEY. (A bare
+# "claude-..." model string would resolve to ADK's Vertex AI `Claude` class.)
+# ---------------------------------------------------------------------------
+LEAD_LLM = AnthropicLlm(model=CLAUDE_MODEL, max_tokens=CLAUDE_MAX_TOKENS)
+SPECIALIST_LLM = AnthropicLlm(model=CLAUDE_SPECIALIST_MODEL, max_tokens=CLAUDE_MAX_TOKENS)
+
+# Effort controls how much Claude reasons. Setting it also stops ADK sending
+# temperature/top_p, which current Claude models reject.
+GEN_CONFIG = AnthropicGenerateContentConfig(effort=CLAUDE_EFFORT)
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +84,7 @@ def _client(ctx) -> str:
 # ---------------------------------------------------------------------------
 internal_research_agent = LlmAgent(
     name="internal_research_agent",
-    model=ADK_MODEL,
+    model=SPECIALIST_LLM,
     description="Searches the bank's internal research library (RAG over PDFs).",
     instruction=lambda ctx: f"""You are the Internal Research specialist at an investment bank.
 {_client(ctx)}
@@ -90,7 +106,7 @@ Then write concise bullet-point findings. After every bullet, cite the source in
 
 market_news_agent = LlmAgent(
     name="market_news_agent",
-    model=ADK_MODEL,
+    model=SPECIALIST_LLM,
     description="Finds the latest market news via the Web Search MCP.",
     instruction=lambda ctx: f"""You are the Market News specialist.
 {_client(ctx)}
@@ -110,7 +126,7 @@ Only use facts returned by the tools.""",
 
 financial_data_agent = LlmAgent(
     name="financial_data_agent",
-    model=ADK_MODEL,
+    model=SPECIALIST_LLM,
     description="Pulls market data, fundamentals and consensus from the FactSet MCP.",
     instruction=lambda ctx: f"""You are the Financial Data specialist.
 {_client(ctx)}
@@ -140,7 +156,7 @@ research_team = ParallelAgent(
 # ---------------------------------------------------------------------------
 brief_writer_agent = LlmAgent(
     name="brief_writer_agent",
-    model=ADK_MODEL,
+    model=LEAD_LLM,
     description="Synthesises all research into a client meeting brief.",
     instruction=lambda ctx: f"""You are a senior investment banking associate writing a client meeting brief for a Managing Director.
 {_client(ctx)}
@@ -190,7 +206,7 @@ meeting_prep_pipeline = SequentialAgent(
 # ---------------------------------------------------------------------------
 root_agent = LlmAgent(
     name="client_brief_coordinator",
-    model=ADK_MODEL,
+    model=LEAD_LLM,
     description="Investment banking client-brief assistant that orchestrates specialist agents.",
     instruction=lambda ctx: f"""You are "Client Brief", an AI assistant for investment bankers. Today is {date.today():%d %b %Y}.
 

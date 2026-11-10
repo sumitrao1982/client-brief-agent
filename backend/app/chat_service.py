@@ -3,6 +3,10 @@ import json
 import logging
 from typing import AsyncIterator
 
+import anthropic
+
+from google.adk.agents.context_cache_config import ContextCacheConfig
+from google.adk.apps import App
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -35,7 +39,10 @@ FINAL_AUTHORS = {"client_brief_coordinator", "brief_writer_agent"}
 class ChatService:
     def __init__(self):
         self.session_service = InMemorySessionService()
-        self.runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=self.session_service)
+        # ContextCacheConfig makes ADK add Claude prompt-cache breakpoints, so the
+        # repeated prefix (system prompt, tools, history) is billed at cache rates.
+        app = App(name=APP_NAME, root_agent=root_agent, context_cache_config=ContextCacheConfig())
+        self.runner = Runner(app=app, session_service=self.session_service)
 
     async def close(self):
         await self.runner.close()
@@ -77,8 +84,10 @@ class ChatService:
         except Exception as exc:  # surface model / key errors to the UI
             log.exception("Agent run failed")
             msg = str(exc)
-            if "API key" in msg or "GOOGLE_API_KEY" in msg or "credentials" in msg.lower():
-                msg = "LLM authentication failed — set GOOGLE_API_KEY in backend/.env. Details: " + msg
+            if isinstance(exc, anthropic.AuthenticationError) or "ANTHROPIC_API_KEY" in msg:
+                msg = "Claude authentication failed — set ANTHROPIC_API_KEY in backend/.env. Details: " + msg
+            elif isinstance(exc, anthropic.RateLimitError):
+                msg = "Claude rate limit reached — wait a moment and try again. Details: " + msg
             yield {"type": "error", "message": msg[:800]}
 
 

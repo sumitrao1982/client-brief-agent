@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Purpose** | Sample agentic application: an investment banker asks for a client meeting brief and a team of AI agents researches the client from internal documents (RAG), web news (MCP) and market data (MCP). |
-| **Stack** | React 18 + Vite · FastAPI · Google ADK 2.14 · MCP Python SDK 2.3 · ChromaDB 1.5 · Gemini (via Google AI Studio) |
+| **Stack** | React 18 + Vite · FastAPI · Google ADK 2.14 · MCP Python SDK 2.3 · ChromaDB 1.5 · Claude (Anthropic API, via ADK's `AnthropicLlm`) |
 | **Status** | Demo / reference implementation. All companies, people and figures are fictitious. |
 
 ## Contents
@@ -32,7 +32,7 @@ flowchart LR
     AG -->|function tool| RAG[(ChromaDB<br/>internal research)]
     AG -->|MCP over stdio| FS[Mock FactSet<br/>MCP server]
     AG -->|MCP over stdio| WS[Mock Web Search<br/>MCP server]
-    AG -->|LLM calls| GM[Gemini API]
+    AG -->|LLM calls| GM[Claude API<br/>Anthropic]
     PDF[Internal PDFs] -->|ingest| RAG
 ```
 
@@ -369,7 +369,7 @@ flowchart LR
 5. **Each specialist** runs its own model → tool → model loop. Its final text is saved to its `output_key`.
 6. **Brief writer** makes a single model call over the merged findings.
 7. **Next user turn.** The Runner sends the message back to the coordinator. The last author (`brief_writer_agent`) sits under a `SequentialAgent`, which is not an LLM agent and can't take part in transfers, so ADK falls back to the root. This was verified in testing.
-8. **Guard rails.** Every specialist has `disallow_transfer_to_parent=True` and `disallow_transfer_to_peers=True`, so none can wander off the plan. `temperature=0.2` keeps outputs factual. Prompts say "Only use facts returned by the tools" and require source tags.
+8. **Guard rails.** Every specialist has `disallow_transfer_to_parent=True` and `disallow_transfer_to_peers=True`, so none can wander off the plan. Each model call uses Claude with a set reasoning `effort` (default `medium`). Prompts say "Only use facts returned by the tools" and require source tags.
 
 ### 6.5 How MCP tools are attached
 
@@ -386,6 +386,32 @@ def _mcp_toolset(script, tool_filter=None):
 - When the LLM calls one, ADK sends an MCP `call_tool` request. The response comes back as MCP content (`{"content":[{"type":"text","text":"<json>"}]}`), which the model reads.
 - The coordinator uses the **same FactSet server** with `tool_filter=["resolve_company"]`, so it only sees the lookup tool. Each toolset instance runs its own subprocess.
 - To use a real MCP server, replace the connection params, e.g. `StreamableHTTPConnectionParams(url="https://…/mcp", headers=...)`. Agent code and prompts don't change.
+
+### 6.6 The LLM: Claude through ADK
+
+ADK is model-agnostic: an `LlmAgent`'s `model` can be a model string or a `BaseLlm` object. This app passes an
+`AnthropicLlm` object:
+
+```python
+LEAD_LLM = AnthropicLlm(model=CLAUDE_MODEL, max_tokens=CLAUDE_MAX_TOKENS)              # coordinator, brief writer
+SPECIALIST_LLM = AnthropicLlm(model=CLAUDE_SPECIALIST_MODEL, max_tokens=CLAUDE_MAX_TOKENS)  # 3 research agents
+GEN_CONFIG = AnthropicGenerateContentConfig(effort=CLAUDE_EFFORT)
+```
+
+- `AnthropicLlm` calls the Anthropic Messages API with the official `anthropic` SDK (`AsyncAnthropic()`), which reads
+  `ANTHROPIC_API_KEY`. A bare `"claude-..."` string is **not** used, because ADK resolves that to its `Claude` class,
+  which goes through Google Vertex AI.
+- On each call ADK translates its request into Claude's format: the instruction becomes `system`, ADK tools (Python
+  functions and MCP tools) become Claude tool definitions, and Claude's `tool_use` / `tool_result` blocks are mapped back
+  to ADK function calls and responses. Agents, tools and prompts are unchanged from any other model.
+- `effort` sets how much Claude reasons (`low` … `max`). Setting it also stops ADK sending `temperature`/`top_p`,
+  which current Claude models reject. Claude Opus 5.5 always thinks adaptively; its thinking blocks come back empty and
+  are passed back unchanged.
+- **Prompt caching:** `ChatService` builds the Runner from an `App` with `ContextCacheConfig()`, so ADK marks cache
+  breakpoints on every Claude request. The repeated prefix (system prompt, tool definitions, history) is then billed at
+  cache-read rates. This matters here because every agent transfer changes the system prompt and tools.
+- **Refusal fallbacks are not enabled:** ADK's Claude converter raises on the `fallback` content block that Anthropic's
+  server-side fallback feature returns, so turning it on would break a run whenever a fallback happened.
 
 ---
 
@@ -480,7 +506,7 @@ SSE is sent as `data: {...}\n\n` frames with `Cache-Control: no-cache` and `X-Ac
 - Demo auth only.
 - MiniLM retrieval quality is modest; there's no reranker.
 - The full index is rebuilt on every ingest (fine for 7 docs).
-- The Gemini free tier rate-limits about 15–20 calls per brief.
+- Each brief costs about 15–20 Claude calls; Anthropic rate limits apply.
 
 ---
 
@@ -488,7 +514,7 @@ SSE is sent as `data: {...}\n\n` frames with `Cache-Control: no-cache` and `X-Ac
 
 | Area | Upgrade |
 |---|---|
-| **LLM** | Vertex AI Gemini (`GOOGLE_GENAI_USE_VERTEXAI=TRUE`) for enterprise data controls; or another provider via ADK's LiteLLM integration |
+| **LLM** | Tune `CLAUDE_EFFORT` and per-agent models from measured quality; Claude on Vertex AI (ADK's `Claude` class) or Amazon Bedrock for cloud-native data controls |
 | **RAG** | Stronger embeddings (e.g. `text-embedding-005`, `bge-large`), a reranker, hybrid BM25 + vector search, incremental ingestion, document-level entitlements (filter by the banker's access rights); or a managed service (Vertex AI RAG Engine, pgvector, Qdrant) — only `rag/store.py` changes |
 | **MCP** | Real vendor MCP servers over Streamable HTTP with auth headers (`header_provider`); timeouts, retries |
 | **Sessions / memory** | `DatabaseSessionService` (Postgres) and ADK memory services for cross-session recall |
